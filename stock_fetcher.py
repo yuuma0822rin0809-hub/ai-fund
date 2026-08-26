@@ -2,22 +2,24 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 
-def fetch_stock_data(ticker, period="3mo"):
+def get_latest_price(ticker):
     """
-    株価データを取得する関数
+    最新株価を取得する関数
     
     Args:
-        ticker (str): 銘柄コード（例："AAPL", "9984"）
-        period (str): 期間（デフォルト：3ヶ月）
+        ticker (str): 銘柄コード
     
     Returns:
-        pd.DataFrame: 株価データフレーム
+        float: 最新株価
     """
     try:
-        data = yf.download(ticker, period=period, progress=False)
-        return data
+        data = yf.download(ticker, period="1d", progress=False)
+        if data is not None and len(data) > 0:
+            latest_price = float(data['Close'].iloc[-1].item())
+            return latest_price
+        return None
     except Exception as e:
-        print(f"エラー: {ticker} のデータ取得に失敗しました。{e}")
+        print(f"エラー: {ticker} の最新株価取得に失敗しました。{e}")
         return None
 
 if __name__ == "__main__":
