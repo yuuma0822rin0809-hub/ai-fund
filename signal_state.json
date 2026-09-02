@@ -1,0 +1,38 @@
+{
+  "SNDK": {
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 1536.87,
+    "updated_at": "2026-09-02 15:25"
+  },
+  "SOXL": {
+    "signal": "買い推奨",
+    "confidence": 70,
+    "price": 105.91,
+    "updated_at": "2026-09-02 15:25"
+  },
+  "9434.T": {
+    "signal": "様子見",
+    "confidence": -10,
+    "price": 241.2,
+    "updated_at": "2026-09-02 15:25"
+  },
+  "7974.T": {
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 8831.0,
+    "updated_at": "2026-09-02 15:25"
+  },
+  "285A.T": {
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 50730.0,
+    "updated_at": "2026-09-02 15:25"
+  },
+  "7201.T": {
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 317.8,
+    "updated_at": "2026-09-02 15:25"
+  }
+}
