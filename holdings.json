@@ -3,7 +3,11 @@
   "holdings": {
     "7974.T": {
       "qty": 100,
-      "cost": 8000
+      "cost": 8000,
+      "target": {
+        "type": "amount",
+        "value": 100000
+      }
     }
   }
 }
