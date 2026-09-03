@@ -1,4 +1,9 @@
 {
   "notify_mode": "signal",
-  "holdings": {}
+  "holdings": {
+    "SOXL": {
+      "qty": 0.855,
+      "cost": 14000
+    }
+  }
 }
