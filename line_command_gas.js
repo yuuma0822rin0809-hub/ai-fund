@@ -1,27 +1,50 @@
 /**
  * 株シグナル通知 — LINE コマンド受付（Google Apps Script 用）
  *
- * LINE のトークに送った文字で watchlist.json を編集する。
- *   一覧              … 登録中の銘柄を返す
- *   追加 7203         … 銘柄を追加（銘柄名は自動で調べる）
- *   追加 7203 トヨタ   … 銘柄名を自分で指定して追加
- *   名前 7203 トヨタ   … 登録済み銘柄の名前だけ変更
- *   削除 7203         … 銘柄を削除
- *   ヘルプ            … 使い方を返す
+ * 銘柄の管理
+ *   一覧                    … 登録中の銘柄と保有状況を表示
+ *   追加 7203               … 銘柄を追加（銘柄名は自動で調べる）
+ *   追加 7203 トヨタ         … 銘柄名を指定して追加
+ *   名前 7203 トヨタ自動車    … 銘柄名だけ変更
+ *   削除 7203               … 銘柄を削除
  *
- * 事前にスクリプトプロパティへ以下を設定すること。
+ * 保有と目標
+ *   保有 7203 100 2500      … 100株を平均2,500円で保有、と登録
+ *   保有削除 7203           … 保有の登録を消す
+ *   目標 7203 30000         … 含み益が+30,000円になったら通知
+ *   目標 7203 10%           … 含み益が+10%になったら通知
+ *   損切 7203 -15000        … 含み損が-15,000円になったら通知
+ *   損切 7203 -5%           … 含み損が-5%になったら通知
+ *   目標解除 7203 / 損切解除 7203
+ *
+ * 通知の切り替え
+ *   通知 判定  … 判定が切り替わったときだけ
+ *   通知 利益  … 目標・損切りに到達したときだけ
+ *   通知 両方  … どちらでも（初期設定）
+ *   通知      … 今の設定を表示
+ *
+ *   ヘルプ    … 使い方を表示
+ *
+ * スクリプトプロパティ
  *   LINE_TOKEN       : LINE のチャネルアクセストークン（長期）
  *   GITHUB_TOKEN     : GitHub の個人アクセストークン（ai-fund の Contents 書き込み権限）
- *   ALLOWED_USER_ID  : 自分の LINE ユーザーID（任意。設定すると他人からの操作を無視する）
- *   WEBHOOK_KEY      : 合言葉（任意。設定したら Webhook URL の末尾に ?k=合言葉 を付ける）
+ *   ALLOWED_USER_ID  : 自分の LINE ユーザーID（任意）
+ *   WEBHOOK_KEY      : 合言葉（任意）
  */
 
 var REPO = 'yuuma0822rin0809-hub/ai-fund';
 var BRANCH = 'main';
-var FILE_PATH = 'watchlist.json';
+var WATCHLIST_PATH = 'watchlist.json';
+var HOLDINGS_PATH = 'holdings.json';
 
-var GITHUB_API = 'https://api.github.com/repos/' + REPO + '/contents/' + FILE_PATH;
+var GITHUB_BASE = 'https://api.github.com/repos/' + REPO + '/contents/';
 var LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
+
+var MODE_LABEL = {
+  both: '両方（判定の切り替わり＋利益・損切り）',
+  signal: '判定の切り替わりだけ',
+  profit: '利益・損切りの到達だけ'
+};
 
 
 function prop(name) {
@@ -29,7 +52,6 @@ function prop(name) {
 }
 
 
-/** LINE からの受け口。必ず 200 を返す（エラーでも LINE に再送させない）。 */
 function doPost(e) {
   var ok = ContentService.createTextOutput('OK');
   try {
@@ -50,7 +72,6 @@ function doPost(e) {
 }
 
 
-/** 動作確認用。ブラウザでURLを開くとこの文字が出れば公開できている。 */
 function doGet() {
   return ContentService.createTextOutput('kabu-signal command endpoint is running');
 }
@@ -80,13 +101,10 @@ function runCommand(rawText) {
   var parts = text.split(/\s+/);
   var cmd = (parts[0] || '').toLowerCase();
 
-  if (cmd === '一覧' || cmd === 'リスト' || cmd === 'list') {
-    return formatList(readWatchlist());
-  }
+  if (cmd === '一覧' || cmd === 'リスト' || cmd === 'list') return showList();
+  if (cmd === 'ヘルプ' || cmd === 'help' || cmd === '使い方') return helpText();
 
-  if (cmd === 'ヘルプ' || cmd === 'help' || cmd === '使い方') {
-    return helpText();
-  }
+  if (cmd === '通知') return setMode(parts[1]);
 
   if (cmd === '追加' || cmd === 'add') {
     if (!parts[1]) return '銘柄コードがありません。\n例：追加 7203';
@@ -103,49 +121,90 @@ function runCommand(rawText) {
     return renameTicker(parts[1], parts.slice(2).join(' '));
   }
 
+  if (cmd === '保有') {
+    if (!parts[1] || !parts[2] || !parts[3]) {
+      return '書き方が違います。\n例：保有 7203 100 2500\n（銘柄コード 株数 平均取得単価）';
+    }
+    return setHolding(parts[1], parts[2], parts[3]);
+  }
+
+  if (cmd === '保有削除') {
+    if (!parts[1]) return '銘柄コードがありません。\n例：保有削除 7203';
+    return removeHolding(parts[1]);
+  }
+
+  if (cmd === '目標') {
+    if (!parts[1] || !parts[2]) return '書き方が違います。\n例：目標 7203 30000\n　　目標 7203 10%';
+    return setThreshold(parts[1], parts[2], 'target');
+  }
+
+  if (cmd === '損切' || cmd === '損切り') {
+    if (!parts[1] || !parts[2]) return '書き方が違います。\n例：損切 7203 -15000\n　　損切 7203 -5%';
+    return setThreshold(parts[1], parts[2], 'stop');
+  }
+
+  if (cmd === '目標解除') return clearThreshold(parts[1], 'target');
+  if (cmd === '損切解除' || cmd === '損切り解除') return clearThreshold(parts[1], 'stop');
+
   return 'コマンドが分かりませんでした。\n\n' + helpText();
 }
 
 
 function helpText() {
   return [
-    '使い方',
-    '',
+    '【銘柄の管理】',
     '一覧',
-    '　登録中の銘柄を表示',
-    '',
     '追加 7203',
-    '　銘柄を追加（名前は自動で調べます）',
-    '',
     '追加 7203 トヨタ',
-    '　名前を指定して追加',
-    '',
     '名前 7203 トヨタ自動車',
-    '　登録済みの名前を変更',
-    '',
     '削除 7203',
-    '　銘柄を削除',
     '',
-    '※ 日本株は4桁の数字だけでOK（.T は自動で付けます）',
+    '【保有と目標】',
+    '保有 7203 100 2500',
+    '　（コード 株数 平均取得単価）',
+    '保有削除 7203',
+    '目標 7203 30000',
+    '目標 7203 10%',
+    '損切 7203 -15000',
+    '損切 7203 -5%',
+    '目標解除 7203 / 損切解除 7203',
+    '',
+    '【通知の切り替え】',
+    '通知 判定',
+    '通知 利益',
+    '通知 両方',
+    '通知（今の設定を表示）',
+    '',
+    '※ 日本株は4桁の数字だけでOK',
     '※ 米国株は AAPL のようにそのまま'
   ].join('\n');
 }
 
 
-/** 入力されたコードを Yahoo ファイナンスの形に整える。 */
 function normalizeCode(input) {
   var code = String(input || '').trim().toUpperCase();
-  code = code.replace(/[０-９Ａ-Ｚ]/g, function (c) {
+  code = code.replace(/[０-９Ａ-Ｚ％]/g, function (c) {
     return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
   });
-  if (/^\d{4}$/.test(code) || /^\d{3}[A-Z]$/.test(code)) {
-    code = code + '.T';
-  }
+  if (/^\d{4}$/.test(code) || /^\d{3}[A-Z]$/.test(code)) code = code + '.T';
   return code;
 }
 
 
-/** 日本株なら Yahoo ファイナンスのページ見出しから会社名を拾う。失敗しても落とさない。 */
+function toHalfWidth(text) {
+  return String(text || '').replace(/[０-９％．－]/g, function (c) {
+    if (c === '．') return '.';
+    if (c === '－') return '-';
+    return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+  });
+}
+
+
+function currencyOf(code) {
+  return /\.T$/.test(code) ? '¥' : '$';
+}
+
+
 function lookupName(code) {
   if (!/\.T$/.test(code)) return '';
   try {
@@ -156,9 +215,7 @@ function lookupName(code) {
     if (res.getResponseCode() !== 200) return '';
     var m = res.getContentText().match(/<title>([^<]+)<\/title>/);
     if (!m) return '';
-    var title = m[1];
-    var name = title.split('【')[0];
-    name = name.replace(/\(株\)/g, '').replace(/株式会社/g, '').trim();
+    var name = m[1].split('【')[0].replace(/\(株\)/g, '').replace(/株式会社/g, '').trim();
     return name.length > 0 && name.length <= 20 ? name : '';
   } catch (err) {
     console.log('銘柄名の取得に失敗: ' + err);
@@ -170,112 +227,285 @@ function lookupName(code) {
 function githubHeaders() {
   var token = prop('GITHUB_TOKEN');
   if (!token) throw new Error('GITHUB_TOKEN がスクリプトプロパティに設定されていません。');
-  return {
-    Authorization: 'Bearer ' + token,
-    Accept: 'application/vnd.github+json'
-  };
+  return { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
 }
 
 
-function readWatchlist() {
-  var res = UrlFetchApp.fetch(GITHUB_API + '?ref=' + BRANCH, {
+/** GitHub 上の JSON を読む。無ければ fallback を返す（sha は null）。 */
+function readJson(path, fallback) {
+  var res = UrlFetchApp.fetch(GITHUB_BASE + path + '?ref=' + BRANCH, {
     headers: githubHeaders(),
     muteHttpExceptions: true
   });
+  if (res.getResponseCode() === 404) {
+    var empty = JSON.parse(JSON.stringify(fallback));
+    empty.__sha = null;
+    return empty;
+  }
   if (res.getResponseCode() !== 200) {
-    throw new Error('watchlist.json を読めませんでした（' + res.getResponseCode() + '）');
+    throw new Error(path + ' を読めませんでした（' + res.getResponseCode() + '）');
   }
   var meta = JSON.parse(res.getContentText());
-  var text = Utilities.newBlob(
-    Utilities.base64Decode(meta.content.replace(/\n/g, ''))
-  ).getDataAsString();
+  var text = Utilities.newBlob(Utilities.base64Decode(meta.content.replace(/\n/g, ''))).getDataAsString();
   var data = JSON.parse(text);
-  data.tickers = data.tickers || [];
-  data.names = data.names || {};
   data.__sha = meta.sha;
   return data;
 }
 
 
-function writeWatchlist(data, message) {
+function writeJson(path, data, message) {
   var sha = data.__sha;
-  var out = { tickers: data.tickers, names: data.names };
+  var out = JSON.parse(JSON.stringify(data));
+  delete out.__sha;
   var text = JSON.stringify(out, null, 2) + '\n';
-  var res = UrlFetchApp.fetch(GITHUB_API, {
+  var payload = {
+    message: message,
+    content: Utilities.base64Encode(Utilities.newBlob(text).getBytes()),
+    branch: BRANCH
+  };
+  if (sha) payload.sha = sha;
+
+  var res = UrlFetchApp.fetch(GITHUB_BASE + path, {
     method: 'put',
     headers: githubHeaders(),
     contentType: 'application/json',
     muteHttpExceptions: true,
-    payload: JSON.stringify({
-      message: message,
-      content: Utilities.base64Encode(Utilities.newBlob(text).getBytes()),
-      sha: sha,
-      branch: BRANCH
-    })
+    payload: JSON.stringify(payload)
   });
   if (res.getResponseCode() >= 300) {
-    throw new Error('watchlist.json を保存できませんでした（' + res.getResponseCode() + '）');
+    throw new Error(path + ' を保存できませんでした（' + res.getResponseCode() + '）');
   }
 }
 
 
+function readWatchlist() {
+  var data = readJson(WATCHLIST_PATH, { tickers: [], names: {} });
+  data.tickers = data.tickers || [];
+  data.names = data.names || {};
+  return data;
+}
+
+
+function readHoldings() {
+  var data = readJson(HOLDINGS_PATH, { notify_mode: 'both', holdings: {} });
+  data.notify_mode = data.notify_mode || 'both';
+  data.holdings = data.holdings || {};
+  return data;
+}
+
+
+function nameOf(code, watch) {
+  var n = watch.names[code];
+  return n ? n + '（' + code + '）' : code;
+}
+
+
+// ---------- 銘柄の管理 ----------
+
 function addTicker(input, givenName) {
   var code = normalizeCode(input);
-  var data = readWatchlist();
+  var watch = readWatchlist();
 
-  if (data.tickers.indexOf(code) >= 0) {
-    var already = data.names[code] ? data.names[code] + '（' + code + '）' : code;
-    return already + ' はすでに登録されています。';
+  if (watch.tickers.indexOf(code) >= 0) {
+    return nameOf(code, watch) + ' はすでに登録されています。';
   }
 
   var name = (givenName || '').trim() || lookupName(code);
-  data.tickers.push(code);
-  if (name) data.names[code] = name;
+  watch.tickers.push(code);
+  if (name) watch.names[code] = name;
 
-  writeWatchlist(data, 'chore: add ' + code + ' via LINE');
+  writeJson(WATCHLIST_PATH, watch, 'chore: add ' + code + ' via LINE');
 
   var shown = name ? name + '（' + code + '）' : code;
   var note = name ? '' : '\n※ 銘柄名は取れませんでした。「名前 ' + input + ' ○○」で付けられます。';
-  return '追加しました。\n■ ' + shown + '\n\n現在 ' + data.tickers.length + ' 銘柄を監視中です。' + note;
+  return '追加しました。\n■ ' + shown + '\n\n現在 ' + watch.tickers.length + ' 銘柄を監視中です。' + note;
 }
 
 
 function removeTicker(input) {
   var code = normalizeCode(input);
-  var data = readWatchlist();
-  var idx = data.tickers.indexOf(code);
+  var watch = readWatchlist();
+  var idx = watch.tickers.indexOf(code);
   if (idx < 0) return code + ' は登録されていません。\n「一覧」で確認できます。';
 
-  var shown = data.names[code] ? data.names[code] + '（' + code + '）' : code;
-  data.tickers.splice(idx, 1);
-  delete data.names[code];
+  var shown = nameOf(code, watch);
+  watch.tickers.splice(idx, 1);
+  delete watch.names[code];
+  writeJson(WATCHLIST_PATH, watch, 'chore: remove ' + code + ' via LINE');
 
-  writeWatchlist(data, 'chore: remove ' + code + ' via LINE');
-  return '削除しました。\n■ ' + shown + '\n\n現在 ' + data.tickers.length + ' 銘柄を監視中です。';
+  var extra = '';
+  var hold = readHoldings();
+  if (hold.holdings[code]) {
+    delete hold.holdings[code];
+    writeJson(HOLDINGS_PATH, hold, 'chore: remove holding ' + code + ' via LINE');
+    extra = '\n保有の登録も一緒に消しました。';
+  }
+
+  return '削除しました。\n■ ' + shown + '\n\n現在 ' + watch.tickers.length + ' 銘柄を監視中です。' + extra;
 }
 
 
 function renameTicker(input, newName) {
   var code = normalizeCode(input);
-  var data = readWatchlist();
-  if (data.tickers.indexOf(code) < 0) return code + ' は登録されていません。';
-
-  data.names[code] = newName.trim();
-  writeWatchlist(data, 'chore: rename ' + code + ' via LINE');
-  return '名前を変更しました。\n■ ' + data.names[code] + '（' + code + '）';
+  var watch = readWatchlist();
+  if (watch.tickers.indexOf(code) < 0) return code + ' は登録されていません。';
+  watch.names[code] = newName.trim();
+  writeJson(WATCHLIST_PATH, watch, 'chore: rename ' + code + ' via LINE');
+  return '名前を変更しました。\n■ ' + watch.names[code] + '（' + code + '）';
 }
 
 
-function formatList(data) {
-  if (data.tickers.length === 0) return '登録されている銘柄はありません。';
-  var lines = ['監視中の銘柄（' + data.tickers.length + '件）', ''];
-  for (var i = 0; i < data.tickers.length; i++) {
-    var code = data.tickers[i];
-    var name = data.names[code];
-    lines.push('■ ' + (name ? name + '（' + code + '）' : code));
+// ---------- 保有と目標 ----------
+
+function setHolding(codeInput, qtyInput, costInput) {
+  var code = normalizeCode(codeInput);
+  var qty = Number(toHalfWidth(qtyInput).replace(/[,株]/g, ''));
+  var cost = Number(toHalfWidth(costInput).replace(/[,円$¥]/g, ''));
+
+  if (!isFinite(qty) || qty <= 0) return '株数が読み取れませんでした。\n例：保有 7203 100 2500';
+  if (!isFinite(cost) || cost <= 0) return '取得単価が読み取れませんでした。\n例：保有 7203 100 2500';
+
+  var watch = readWatchlist();
+  var added = '';
+  if (watch.tickers.indexOf(code) < 0) {
+    var name = lookupName(code);
+    watch.tickers.push(code);
+    if (name) watch.names[code] = name;
+    writeJson(WATCHLIST_PATH, watch, 'chore: add ' + code + ' via LINE');
+    added = '\n※ 監視銘柄にも追加しました。';
+  }
+
+  var hold = readHoldings();
+  var entry = hold.holdings[code] || {};
+  entry.qty = qty;
+  entry.cost = cost;
+  hold.holdings[code] = entry;
+  writeJson(HOLDINGS_PATH, hold, 'chore: set holding ' + code + ' via LINE');
+
+  var sym = currencyOf(code);
+  var lines = [
+    '保有を登録しました。',
+    '■ ' + nameOf(code, watch),
+    '　' + qty.toLocaleString() + '株 / 取得 ' + sym + cost.toLocaleString(),
+    '　投資額 ' + sym + (qty * cost).toLocaleString()
+  ];
+  if (!entry.target && !entry.stop) {
+    lines.push('');
+    lines.push('※ 利益の通知には目標の設定が必要です。');
+    lines.push('　例：目標 ' + codeInput + ' 30000');
+  }
+  return lines.join('\n') + added;
+}
+
+
+function removeHolding(input) {
+  var code = normalizeCode(input);
+  var hold = readHoldings();
+  if (!hold.holdings[code]) return code + ' の保有は登録されていません。';
+  delete hold.holdings[code];
+  writeJson(HOLDINGS_PATH, hold, 'chore: remove holding ' + code + ' via LINE');
+  return code + ' の保有登録を消しました。\n監視銘柄としては残っています。';
+}
+
+
+function parseThreshold(input) {
+  var text = toHalfWidth(input).replace(/[,円]/g, '').trim();
+  var isPercent = /%$/.test(text);
+  var num = Number(text.replace(/%$/, ''));
+  if (!isFinite(num) || num === 0) return null;
+  return { type: isPercent ? 'percent' : 'amount', value: num };
+}
+
+
+function setThreshold(codeInput, valueInput, kind) {
+  var code = normalizeCode(codeInput);
+  var rule = parseThreshold(valueInput);
+  if (!rule) {
+    return '数値が読み取れませんでした。\n例：' + (kind === 'target' ? '目標 7203 30000' : '損切 7203 -15000');
+  }
+
+  if (kind === 'target' && rule.value < 0) return '目標はプラスの数字で指定してください。\n例：目標 7203 30000';
+  if (kind === 'stop' && rule.value > 0) return '損切りはマイナスの数字で指定してください。\n例：損切 7203 -15000';
+
+  var hold = readHoldings();
+  if (!hold.holdings[code]) {
+    return code + ' の保有がまだ登録されていません。\n先に「保有 ' + codeInput + ' 株数 取得単価」を送ってください。';
+  }
+  hold.holdings[code][kind] = rule;
+  writeJson(HOLDINGS_PATH, hold, 'chore: set ' + kind + ' for ' + code + ' via LINE');
+
+  var watch = readWatchlist();
+  var word = kind === 'target' ? '利益目標' : '損切りライン';
+  return word + 'を設定しました。\n■ ' + nameOf(code, watch) + '\n　' + describeRule(rule, code);
+}
+
+
+function clearThreshold(codeInput, kind) {
+  if (!codeInput) return '銘柄コードがありません。';
+  var code = normalizeCode(codeInput);
+  var hold = readHoldings();
+  if (!hold.holdings[code] || !hold.holdings[code][kind]) return code + ' には設定されていません。';
+  delete hold.holdings[code][kind];
+  writeJson(HOLDINGS_PATH, hold, 'chore: clear ' + kind + ' for ' + code + ' via LINE');
+  return code + ' の' + (kind === 'target' ? '利益目標' : '損切りライン') + 'を解除しました。';
+}
+
+
+function describeRule(rule, code) {
+  if (!rule) return '未設定';
+  if (rule.type === 'percent') return (rule.value > 0 ? '+' : '') + rule.value + '%';
+  var sym = currencyOf(code);
+  return (rule.value > 0 ? '+' : '-') + sym + Math.abs(rule.value).toLocaleString();
+}
+
+
+// ---------- 通知モード ----------
+
+function setMode(arg) {
+  var hold = readHoldings();
+
+  if (!arg) {
+    return '今の通知設定\n■ ' + (MODE_LABEL[hold.notify_mode] || hold.notify_mode) +
+      '\n\n変えるには\n通知 判定 / 通知 利益 / 通知 両方';
+  }
+
+  var map = {
+    '判定': 'signal', 'シグナル': 'signal', 'signal': 'signal',
+    '利益': 'profit', '損益': 'profit', 'profit': 'profit',
+    '両方': 'both', 'both': 'both', '全部': 'both'
+  };
+  var mode = map[arg];
+  if (!mode) {
+    return '「通知 判定」「通知 利益」「通知 両方」のどれかを送ってください。';
+  }
+
+  hold.notify_mode = mode;
+  writeJson(HOLDINGS_PATH, hold, 'chore: set notify mode ' + mode + ' via LINE');
+  return '通知設定を変更しました。\n■ ' + MODE_LABEL[mode];
+}
+
+
+// ---------- 一覧 ----------
+
+function showList() {
+  var watch = readWatchlist();
+  var hold = readHoldings();
+
+  if (watch.tickers.length === 0) return '登録されている銘柄はありません。';
+
+  var lines = ['監視中の銘柄（' + watch.tickers.length + '件）', ''];
+  for (var i = 0; i < watch.tickers.length; i++) {
+    var code = watch.tickers[i];
+    var sym = currencyOf(code);
+    lines.push('■ ' + nameOf(code, watch));
+    var h = hold.holdings[code];
+    if (h) {
+      lines.push('　保有 ' + Number(h.qty).toLocaleString() + '株 / 取得 ' + sym + Number(h.cost).toLocaleString());
+      lines.push('　目標 ' + describeRule(h.target, code) + ' / 損切 ' + describeRule(h.stop, code));
+    }
   }
   lines.push('');
-  lines.push('※ 判定が変わった翌朝に通知します');
+  lines.push('通知設定：' + (MODE_LABEL[hold.notify_mode] || hold.notify_mode));
   return lines.join('\n');
 }
 
