@@ -1,0 +1,44 @@
+{
+  "SNDK": {
+    "name": "サンディスク",
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 1536.87,
+    "updated_at": "2026-09-03 09:34"
+  },
+  "SOXL": {
+    "name": "半導体ブル3倍ETF",
+    "signal": "買い推奨",
+    "confidence": 70,
+    "price": 105.91,
+    "updated_at": "2026-09-03 09:34"
+  },
+  "9434.T": {
+    "name": "ソフトバンク",
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 241.0,
+    "updated_at": "2026-09-03 09:34"
+  },
+  "7974.T": {
+    "name": "任天堂",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 8815.0,
+    "updated_at": "2026-09-03 09:34"
+  },
+  "285A.T": {
+    "name": "キオクシアHD",
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 51230.0,
+    "updated_at": "2026-09-03 09:34"
+  },
+  "7201.T": {
+    "name": "日産自動車",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 323.7,
+    "updated_at": "2026-09-03 09:34"
+  }
+}
