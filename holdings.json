@@ -3,7 +3,11 @@
   "holdings": {
     "SOXL": {
       "qty": 0.855,
-      "cost": 14000
+      "cost": 14000,
+      "target": {
+        "type": "amount",
+        "value": 16000
+      }
     }
   }
 }
