@@ -3,30 +3,36 @@
     "name": "サンディスク",
     "signal": "様子見",
     "confidence": 30,
-    "price": 1553.4,
-    "updated_at": "2026-09-03 18:46"
+    "price": 1554.99,
+    "updated_at": "2026-09-04 07:06",
+    "target_hit": false,
+    "stop_hit": false
   },
   "SOXL": {
     "name": "半導体ブル3倍ETF",
     "signal": "買い推奨",
     "confidence": 70,
-    "price": 106.35,
-    "updated_at": "2026-09-03 18:46"
+    "price": 106.74,
+    "updated_at": "2026-09-04 07:06",
+    "target_hit": false,
+    "stop_hit": false
   },
   "9434.T": {
     "name": "ソフトバンク",
     "signal": "様子見",
     "confidence": 30,
     "price": 237.6,
-    "updated_at": "2026-09-03 18:46"
+    "updated_at": "2026-09-04 07:06",
+    "target_hit": false,
+    "stop_hit": false
   },
   "7974.T": {
     "name": "任天堂",
     "signal": "様子見",
     "confidence": -30,
     "price": 8855.0,
-    "updated_at": "2026-09-03 18:46",
-    "target_hit": true,
+    "updated_at": "2026-09-04 07:06",
+    "target_hit": false,
     "stop_hit": false
   },
   "285A.T": {
@@ -34,14 +40,18 @@
     "signal": "様子見",
     "confidence": 30,
     "price": 51670.0,
-    "updated_at": "2026-09-03 18:46"
+    "updated_at": "2026-09-04 07:06",
+    "target_hit": false,
+    "stop_hit": false
   },
   "7201.T": {
     "name": "日産自動車",
     "signal": "様子見",
     "confidence": -30,
     "price": 316.9,
-    "updated_at": "2026-09-03 18:46"
+    "updated_at": "2026-09-04 07:06",
+    "target_hit": false,
+    "stop_hit": false
   },
   "8136.T": {
     "name": "",
@@ -55,6 +65,13 @@
     "signal": "様子見",
     "confidence": 30,
     "price": 5778.0,
-    "updated_at": "2026-09-03 18:46"
+    "updated_at": "2026-09-04 07:06"
+  },
+  "MNST": {
+    "name": "",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 44.08,
+    "updated_at": "2026-09-04 07:06"
   }
 }
