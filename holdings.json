@@ -6,7 +6,7 @@
       "cost": 8000,
       "target": {
         "type": "amount",
-        "value": 100000
+        "value": 50000
       }
     }
   }
