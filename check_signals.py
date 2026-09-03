@@ -3,6 +3,7 @@
 GitHub Actions から1日1回実行される想定。
 watchlist.json の銘柄について streamlit_app.py と同じロジックで判定を出し、
 signal_state.json に記録した前回の判定と比べて、変わったものだけ通知する。
+watchlist.json の names に銘柄名を書いておくと、通知に銘柄名が表示される。
 """
 
 import json
@@ -18,6 +19,8 @@ WATCHLIST_FILE = "watchlist.json"
 STATE_FILE = "signal_state.json"
 LINE_BROADCAST_URL = "https://api.line.me/v2/bot/message/broadcast"
 
+NAMES = {}
+
 
 def load_json(path, default):
     if not os.path.exists(path):
@@ -30,6 +33,12 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
+
+
+def label(code):
+    """通知に出す見出し。銘柄名が分かれば「名前（コード）」、無ければコードのみ。"""
+    name = NAMES.get(code)
+    return f"{name}（{code}）" if name else code
 
 
 def judge(code):
@@ -115,8 +124,11 @@ def send_line(text):
 
 
 def main():
+    global NAMES
+
     watchlist = load_json(WATCHLIST_FILE, {"tickers": []})
     tickers = watchlist.get("tickers", [])
+    NAMES = watchlist.get("names", {}) or {}
     if not tickers:
         print("watchlist.json に銘柄がありません")
         return 0
@@ -133,23 +145,31 @@ def main():
         try:
             result = judge(code)
         except Exception as e:
-            errors.append(f"{code}: 取得エラー ({type(e).__name__})")
+            errors.append(f"{label(code)}: 取得エラー ({type(e).__name__})")
             continue
 
         if result is None:
-            errors.append(f"{code}: データが取得できませんでした")
+            errors.append(f"{label(code)}: データが取得できませんでした")
             continue
 
         signal, confidence, price, detail = result
         currency = "¥" if code.upper().endswith(".T") else "$"
-        line = f"{code}  {signal} ({confidence:+d})  {currency}{price:,.2f}\n  " + " / ".join(detail)
-        all_lines.append(line)
+        all_lines.append(
+            f"■ {label(code)}\n"
+            f"　{signal}（{confidence:+d}）　{currency}{price:,.2f}\n"
+            f"　" + " / ".join(detail)
+        )
 
         prev = state.get(code, {}).get("signal")
         if prev is not None and prev != signal:
-            changed_lines.append(f"{code}  {prev} → {signal}\n  {currency}{price:,.2f}  " + " / ".join(detail))
+            changed_lines.append(
+                f"■ {label(code)}\n"
+                f"　{prev} → {signal}（{confidence:+d}）\n"
+                f"　{currency}{price:,.2f}　" + " / ".join(detail)
+            )
 
         state[code] = {
+            "name": NAMES.get(code, ""),
             "signal": signal,
             "confidence": confidence,
             "price": round(price, 4),
