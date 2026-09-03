@@ -1,5 +1,5 @@
 {
-  "notify_mode": "both",
+  "notify_mode": "signal",
   "holdings": {
     "7974.T": {
       "qty": 100,
