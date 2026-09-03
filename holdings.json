@@ -1,4 +1,9 @@
 {
   "notify_mode": "both",
-  "holdings": {}
+  "holdings": {
+    "7974.T": {
+      "qty": 100,
+      "cost": 8000
+    }
+  }
 }
