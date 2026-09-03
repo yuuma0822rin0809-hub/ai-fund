@@ -1,13 +1,4 @@
 {
   "notify_mode": "signal",
-  "holdings": {
-    "7974.T": {
-      "qty": 100,
-      "cost": 8000,
-      "target": {
-        "type": "amount",
-        "value": 50000
-      }
-    }
-  }
+  "holdings": {}
 }
