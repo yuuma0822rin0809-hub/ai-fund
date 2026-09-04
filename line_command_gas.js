@@ -6,6 +6,7 @@
  *   追加 7203               … 銘柄を追加（銘柄名は自動で調べる）
  *   追加 7203 トヨタ         … 銘柄名を指定して追加
  *   名前 7203 トヨタ自動車    … 銘柄名だけ変更
+ *   名前補完                … 名前が空の銘柄をまとめて調べ直す
  *   削除 7203               … 銘柄を削除
  *
  * 保有と目標
@@ -152,6 +153,8 @@ function runCommand(rawText) {
     return removeTicker(parts[1]);
   }
 
+  if (cmd === '名前補完' || cmd === '名前確認') return fillMissingNames();
+
   if (cmd === '名前' || cmd === 'name') {
     if (!parts[1] || !parts[2]) return '書き方が違います。\n例：名前 7203 トヨタ自動車';
     return renameTicker(parts[1], parts.slice(2).join(' '));
@@ -193,6 +196,7 @@ function helpText() {
     '追加 7203',
     '追加 7203 トヨタ',
     '名前 7203 トヨタ自動車',
+    '名前補完（名前が空の銘柄をまとめて調べ直す）',
     '削除 7203',
     '',
     '【保有と目標】',
@@ -246,21 +250,72 @@ function currencyOf(code) {
 
 
 function lookupName(code) {
-  if (!/\.T$/.test(code)) return '';
-  try {
-    var res = UrlFetchApp.fetch('https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code), {
-      muteHttpExceptions: true,
-      followRedirects: true
-    });
-    if (res.getResponseCode() !== 200) return '';
-    var m = res.getContentText().match(/<title>([^<]+)<\/title>/);
-    if (!m) return '';
-    var name = m[1].split('【')[0].replace(/\(株\)/g, '').replace(/株式会社/g, '').trim();
-    return name.length > 0 && name.length <= 20 ? name : '';
-  } catch (err) {
-    console.log('銘柄名の取得に失敗: ' + err);
-    return '';
+  // Yahoo!ファイナンス（日本版）は米国株にも日本語名のページがある。
+  // 短時間に続けて叩くと弾かれることがあるので、少し待ってから最大3回試す。
+  var url = 'https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code);
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) Utilities.sleep(1500 * attempt);
+      var res = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      });
+      if (res.getResponseCode() !== 200) continue;
+      var m = res.getContentText().match(/<title>([^<]+)<\/title>/);
+      if (!m) continue;
+      var title = m[1];
+      if (title.indexOf('【') < 0) continue;
+      var name = title.split('【')[0].replace(/\(株\)/g, '').replace(/株式会社/g, '').trim();
+      if (name.length > 0 && name.length <= 24) return name;
+    } catch (err) {
+      console.log('銘柄名の取得に失敗 (' + code + ', ' + (attempt + 1) + '回目): ' + err);
+    }
   }
+  return '';
+}
+
+
+/** 名前が空の銘柄をまとめて調べ直す。 */
+function fillMissingNames() {
+  var watch = readWatchlist();
+  var targets = [];
+  for (var i = 0; i < watch.tickers.length; i++) {
+    var code = watch.tickers[i];
+    if (!watch.names[code]) targets.push(code);
+  }
+  if (targets.length === 0) return 'すべての銘柄に名前が付いています。';
+
+  var found = [];
+  var failed = [];
+  for (var j = 0; j < targets.length; j++) {
+    var c = targets[j];
+    var name = lookupName(c);
+    if (name) {
+      watch.names[c] = name;
+      found.push('■ ' + name + '（' + c + '）');
+    } else {
+      failed.push(c);
+    }
+    if (j < targets.length - 1) Utilities.sleep(800);
+  }
+
+  if (found.length > 0) {
+    writeJson(WATCHLIST_PATH, watch, 'chore: fill ' + found.length + ' names via LINE');
+  }
+
+  var lines = [];
+  if (found.length > 0) {
+    lines.push('名前を付けました（' + found.length + '件）');
+    lines = lines.concat(found);
+  }
+  if (failed.length > 0) {
+    lines.push('');
+    lines.push('取れなかった銘柄（' + failed.length + '件）');
+    lines.push(failed.join(' / '));
+    lines.push('「名前 コード 名称」で付けてください。');
+  }
+  return lines.join('\n');
 }
 
 
