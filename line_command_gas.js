@@ -17,6 +17,12 @@
  *   損切 7203 -5%           … 含み損が-5%になったら通知
  *   目標解除 7203 / 損切解除 7203
  *
+ * まとめて送る
+ *   1つのメッセージに1行1コマンドで書くと、上から順にまとめて処理する。
+ *     保有 7974 300 7500
+ *     保有 8136 200 1300
+ *     目標 7974 50000
+ *
  * 通知の切り替え
  *   通知 判定  … 判定が切り替わったときだけ
  *   通知 利益  … 目標・損切りに到達したときだけ
@@ -86,13 +92,43 @@ function handleEvent(ev) {
     return;
   }
 
-  var reply;
-  try {
-    reply = runCommand(ev.message.text);
-  } catch (err) {
-    reply = 'エラーが起きました。\n' + err;
+  replyToLine(ev.replyToken, runMessage(ev.message.text));
+}
+
+
+/** 1メッセージに複数行あれば、1行を1コマンドとして順番に処理する。 */
+function runMessage(rawText) {
+  var lines = String(rawText || '').split(/\r?\n/);
+  var commands = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].replace(/　/g, ' ').trim();
+    if (line) commands.push(line);
   }
-  replyToLine(ev.replyToken, reply);
+
+  if (commands.length === 0) return helpText();
+
+  if (commands.length === 1) {
+    try {
+      return runCommand(commands[0]);
+    } catch (err) {
+      return 'エラーが起きました。\n' + err;
+    }
+  }
+
+  var results = [];
+  var okCount = 0;
+  for (var j = 0; j < commands.length; j++) {
+    var result;
+    try {
+      result = runCommand(commands[j]);
+      okCount++;
+    } catch (err) {
+      result = 'エラー: ' + err;
+    }
+    results.push('▶ ' + commands[j] + '\n' + result);
+  }
+  var header = commands.length + '件を処理しました（成功 ' + okCount + '件）\n\n';
+  return header + results.join('\n\n────────\n\n');
 }
 
 
@@ -168,6 +204,10 @@ function helpText() {
     '損切 7203 -15000',
     '損切 7203 -5%',
     '目標解除 7203 / 損切解除 7203',
+    '',
+    '【まとめて送る】',
+    '1行に1コマンドで複数行書くと、',
+    '上から順にまとめて処理します。',
     '',
     '【通知の切り替え】',
     '通知 判定',
