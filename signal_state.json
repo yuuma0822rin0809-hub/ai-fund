@@ -3,17 +3,17 @@
     "name": "サンディスク",
     "signal": "様子見",
     "confidence": 30,
-    "price": 1554.99,
-    "updated_at": "2026-09-04 07:06",
+    "price": 1740.0,
+    "updated_at": "2026-09-05 07:06",
     "target_hit": false,
     "stop_hit": false
   },
   "SOXL": {
     "name": "半導体ブル3倍ETF",
-    "signal": "買い推奨",
-    "confidence": 70,
-    "price": 106.74,
-    "updated_at": "2026-09-04 07:06",
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 117.28,
+    "updated_at": "2026-09-05 07:06",
     "target_hit": false,
     "stop_hit": false
   },
@@ -21,8 +21,8 @@
     "name": "ソフトバンク",
     "signal": "様子見",
     "confidence": 30,
-    "price": 237.6,
-    "updated_at": "2026-09-04 07:06",
+    "price": 239.2,
+    "updated_at": "2026-09-05 07:06",
     "target_hit": false,
     "stop_hit": false
   },
@@ -30,8 +30,8 @@
     "name": "任天堂",
     "signal": "様子見",
     "confidence": -30,
-    "price": 8855.0,
-    "updated_at": "2026-09-04 07:06",
+    "price": 8839.0,
+    "updated_at": "2026-09-05 07:06",
     "target_hit": false,
     "stop_hit": false
   },
@@ -39,8 +39,8 @@
     "name": "キオクシアHD",
     "signal": "様子見",
     "confidence": 30,
-    "price": 51670.0,
-    "updated_at": "2026-09-04 07:06",
+    "price": 54460.0,
+    "updated_at": "2026-09-05 07:06",
     "target_hit": false,
     "stop_hit": false
   },
@@ -64,14 +64,85 @@
     "name": "双日",
     "signal": "様子見",
     "confidence": 30,
-    "price": 5778.0,
-    "updated_at": "2026-09-04 07:06"
+    "price": 5762.0,
+    "updated_at": "2026-09-05 07:06"
   },
   "MNST": {
-    "name": "",
+    "name": "モンスター・ビバレッジ",
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 43.82,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "6324.T": {
+    "target_hit": false,
+    "stop_hit": false,
+    "name": "ハーモニック・ドライブ・システムズ",
+    "signal": "様子見",
+    "confidence": 30,
+    "price": 5730.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "6504.T": {
+    "target_hit": false,
+    "stop_hit": false,
+    "name": "富士電機",
+    "signal": "買い推奨",
+    "confidence": 70,
+    "price": 13110.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "5715.T": {
+    "name": "古河機械金属",
     "signal": "様子見",
     "confidence": -30,
-    "price": 44.08,
-    "updated_at": "2026-09-04 07:06"
+    "price": 4240.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "6330.T": {
+    "name": "東洋エンジニアリング",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 2476.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "1885.T": {
+    "name": "東亜建設工業",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 2087.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "6269.T": {
+    "name": "三井海洋開発",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 9385.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "7746.T": {
+    "name": "岡本硝子",
+    "signal": "様子見",
+    "confidence": -30,
+    "price": 792.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "6981.T": {
+    "target_hit": false,
+    "stop_hit": false,
+    "name": "村田製作所",
+    "signal": "買い推奨",
+    "confidence": 70,
+    "price": 7191.0,
+    "updated_at": "2026-09-05 07:06"
+  },
+  "3436.T": {
+    "target_hit": false,
+    "stop_hit": false,
+    "name": "SUMCO",
+    "signal": "買い推奨",
+    "confidence": 70,
+    "price": 3229.0,
+    "updated_at": "2026-09-05 07:06"
   }
 }
