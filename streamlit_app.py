@@ -1,7 +1,14 @@
+import json
+import re
+from pathlib import Path
+
+import requests
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+
+WATCHLIST_PATH = Path(__file__).with_name("watchlist.json")
 
 # ページ設定
 st.set_page_config(page_title="AI Smart Trader", layout="wide")
@@ -16,6 +23,55 @@ period = st.sidebar.selectbox("分析期間", ["1mo", "3mo", "6mo", "1y", "2y"],
 
 def currency_symbol(code: str) -> str:
     return "¥" if code.upper().endswith(".T") else "$"
+
+
+def normalize_code(text: str) -> str:
+    """LINE と同じルール：4桁の数字（285A のような英数字も）なら .T を自動で付ける。
+    全角の数字・英字は半角に直す。"""
+    code = (text or "").strip().upper()
+    code = "".join(chr(ord(c) - 0xFEE0) if "０" <= c <= "９" or "Ａ" <= c <= "Ｚ" else c for c in code)
+    if re.fullmatch(r"\d{4}", code) or re.fullmatch(r"\d{3}[A-Z]", code):
+        code += ".T"
+    return code
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_watchlist_names() -> dict:
+    """LINE で登録した watchlist.json の銘柄名を読む（無ければ空）。"""
+    try:
+        data = json.loads(WATCHLIST_PATH.read_text(encoding="utf-8"))
+        return data.get("names", {}) or {}
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def lookup_name(code: str) -> str:
+    """銘柄名を返す。watchlist.json に無ければ Yahoo!ファイナンス（日本版）の
+    ページタイトルから取る（GAS と同じ方法。日本株・米国株どちらも日本語名が取れる）。"""
+    names = load_watchlist_names()
+    if names.get(code):
+        return names[code]
+    try:
+        res = requests.get(
+            f"https://finance.yahoo.co.jp/quote/{code}",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+            timeout=8,
+        )
+        if res.status_code != 200:
+            return ""
+        m = re.search(r"<title>([^<]+)</title>", res.text)
+        if not m or "【" not in m.group(1):
+            return ""
+        name = m.group(1).split("【")[0].replace("(株)", "").replace("株式会社", "").strip()
+        return name if 0 < len(name) <= 24 else ""
+    except Exception:
+        return ""
+
+
+def display_name(code: str) -> str:
+    name = lookup_name(code)
+    return f"{name}（{code}）" if name else code
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -45,16 +101,18 @@ tab1, tab2, tab3 = st.tabs(["📊 銘柄分析", "🎯 シグナル判定", "�
 
 with tab1:
     st.subheader("銘柄情報入力")
-    ticker = st.text_input("銘柄コード入力", value="7201.T", help="例：7201.T（日産）、AAPL（Apple）")
+    ticker = st.text_input("銘柄コード入力", value="7974", help="例：7974（任天堂）、285A（キオクシア）、AAPL（Apple）。日本株は4桁だけでOK")
 
     if st.button("📥 分析開始") and ticker:
-        code = ticker.strip()
+        code = normalize_code(ticker)
         with st.spinner(f"{code} のデータを取得中..."):
             data = fetch_history(code, period)
+            shown = display_name(code)
 
         if data.empty:
             st.error(f"❌ {code} のデータが見つかりません。銘柄コードを確認してください。")
         else:
+            st.markdown(f"## 🏷️ {shown}")
             sym = currency_symbol(code)
             latest_price = float(data["Close"].iloc[-1])
             prev_close = float(data["Close"].iloc[-2]) if len(data) > 1 else latest_price
@@ -70,13 +128,15 @@ with tab1:
             st.line_chart(data["Close"])
 
             st.session_state.ticker = code
+            st.session_state.name = shown
             st.session_state.data = data
-            st.success(f"✅ {code} の分析準備完了（他のタブで判定を確認できます）")
+            st.success(f"✅ {shown} の分析準備完了（他のタブで判定を確認できます）")
 
 with tab2:
     st.subheader("🎯 買い・売りシグナル")
     if "data" in st.session_state:
         code = st.session_state.get("ticker", "")
+        st.markdown(f"#### 🏷️ {st.session_state.get('name', code)}")
         sym = currency_symbol(code)
         df = add_indicators(st.session_state.data)
         latest = df.iloc[-1]
@@ -133,6 +193,7 @@ with tab2:
 with tab3:
     st.subheader("📊 テクニカル指標詳細")
     if "data" in st.session_state:
+        st.markdown(f"#### 🏷️ {st.session_state.get('name', st.session_state.get('ticker', ''))}")
         df = add_indicators(st.session_state.data)
         col1, col2 = st.columns(2)
         with col1:
