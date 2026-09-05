@@ -1,14 +1,6 @@
 {
   "notify_mode": "signal",
   "holdings": {
-    "SOXL": {
-      "qty": 0.855,
-      "cost": 14000,
-      "target": {
-        "type": "amount",
-        "value": 18000
-      }
-    },
     "7974.T": {
       "qty": 1.10362,
       "cost": 8899,
