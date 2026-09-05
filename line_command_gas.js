@@ -11,6 +11,9 @@
  *
  * 保有と目標
  *   保有 7203 100 2500      … 100株を平均2,500円で保有、と登録
+ *   買増 7203 100 2600      … 100株を2,600円で買い足した（株数と平均取得単価を自動計算）
+ *   売却 7203 50            … 50株売った（株数だけ減らす。全部売ると保有登録が消える）
+ *   売却 7203 全部          … 全株売却
  *   保有削除 7203           … 保有の登録を消す
  *   目標 7203 30000         … 含み益が+30,000円になったら通知
  *   目標 7203 10%           … 含み益が+10%になったら通知
@@ -172,6 +175,20 @@ function runCommand(rawText) {
     return removeHolding(parts[1]);
   }
 
+  if (cmd === '買増' || cmd === '買い増し' || cmd === '買増し' || cmd === '追加購入') {
+    if (!parts[1] || !parts[2] || !parts[3]) {
+      return '書き方が違います。\n例：買増 7203 100 2600\n（銘柄コード 買い足した株数 買った単価）';
+    }
+    return addToHolding(parts[1], parts[2], parts[3]);
+  }
+
+  if (cmd === '売却' || cmd === '売った' || cmd === '一部売却') {
+    if (!parts[1] || !parts[2]) {
+      return '書き方が違います。\n例：売却 7203 50\n（銘柄コード 売った株数）\n全部売ったときは「売却 7203 全部」';
+    }
+    return sellFromHolding(parts[1], parts[2]);
+  }
+
   if (cmd === '目標') {
     if (!parts[1] || !parts[2]) return '書き方が違います。\n例：目標 7203 30000\n　　目標 7203 10%';
     return setThreshold(parts[1], parts[2], 'target');
@@ -202,6 +219,9 @@ function helpText() {
     '【保有と目標】',
     '保有 7203 100 2500',
     '　（コード 株数 平均取得単価）',
+    '買増 7203 100 2600',
+    '　（買い足した株数と単価。平均取得単価は自動計算）',
+    '売却 7203 50 / 売却 7203 全部',
     '保有削除 7203',
     '目標 7203 30000',
     '目標 7203 10%',
@@ -500,6 +520,79 @@ function removeHolding(input) {
   delete hold.holdings[code];
   writeJson(HOLDINGS_PATH, hold, 'chore: remove holding ' + code + ' via LINE');
   return code + ' の保有登録を消しました。\n監視銘柄としては残っています。';
+}
+
+
+/** 買い増し：株数を足し、平均取得単価を計算し直す。 */
+function addToHolding(codeInput, qtyInput, priceInput) {
+  var code = normalizeCode(codeInput);
+  var qty = Number(toHalfWidth(qtyInput).replace(/[,株]/g, ''));
+  var price = Number(toHalfWidth(priceInput).replace(/[,円$¥]/g, ''));
+
+  if (!isFinite(qty) || qty <= 0) return '株数が読み取れませんでした。\n例：買増 7203 100 2600';
+  if (!isFinite(price) || price <= 0) return '単価が読み取れませんでした。\n例：買増 7203 100 2600';
+
+  var hold = readHoldings();
+  var entry = hold.holdings[code];
+  if (!entry) {
+    return code + ' の保有がまだ登録されていません。\n初回は「保有 ' + codeInput + ' 株数 取得単価」で登録してください。';
+  }
+
+  var oldQty = Number(entry.qty);
+  var oldCost = Number(entry.cost);
+  var newQty = oldQty + qty;
+  var newCost = Math.round(((oldQty * oldCost + qty * price) / newQty) * 100) / 100;
+  entry.qty = newQty;
+  entry.cost = newCost;
+  writeJson(HOLDINGS_PATH, hold, 'chore: add to holding ' + code + ' via LINE');
+
+  var watch = readWatchlist();
+  var sym = currencyOf(code);
+  return [
+    '買い増しを反映しました。',
+    '■ ' + nameOf(code, watch),
+    '　これまで ' + oldQty.toLocaleString() + '株（' + sym + oldCost.toLocaleString() + '）',
+    '　＋ 今回 ' + qty.toLocaleString() + '株（' + sym + price.toLocaleString() + '）',
+    '　→ ' + newQty.toLocaleString() + '株 / 平均取得 ' + sym + newCost.toLocaleString(),
+    '　投資額 ' + sym + Math.round(newQty * newCost).toLocaleString()
+  ].join('\n');
+}
+
+
+/** 売却：株数だけ減らす（平均取得単価は変わらない）。全部売ったら保有登録を消す。 */
+function sellFromHolding(codeInput, qtyInput) {
+  var code = normalizeCode(codeInput);
+  var hold = readHoldings();
+  var entry = hold.holdings[code];
+  if (!entry) return code + ' の保有は登録されていません。';
+
+  var oldQty = Number(entry.qty);
+  var raw = toHalfWidth(qtyInput).replace(/[,株]/g, '');
+  var qty = (raw === '全部' || raw === '全て' || raw === 'すべて' || raw.toLowerCase() === 'all') ? oldQty : Number(raw);
+  if (!isFinite(qty) || qty <= 0) return '株数が読み取れませんでした。\n例：売却 7203 50';
+  if (qty > oldQty) {
+    return '保有は ' + oldQty.toLocaleString() + '株です。それより多くは売却できません。\n全部売ったなら「売却 ' + codeInput + ' 全部」を送ってください。';
+  }
+
+  var watch = readWatchlist();
+  var sym = currencyOf(code);
+  var newQty = oldQty - qty;
+
+  if (newQty === 0) {
+    delete hold.holdings[code];
+    writeJson(HOLDINGS_PATH, hold, 'chore: sell all ' + code + ' via LINE');
+    return '全株売却として保有登録を消しました。\n■ ' + nameOf(code, watch) + '\n監視銘柄としては残っています。';
+  }
+
+  entry.qty = newQty;
+  writeJson(HOLDINGS_PATH, hold, 'chore: sell ' + qty + ' of ' + code + ' via LINE');
+  return [
+    '売却を反映しました。',
+    '■ ' + nameOf(code, watch),
+    '　' + oldQty.toLocaleString() + '株 → ' + newQty.toLocaleString() + '株（' + qty.toLocaleString() + '株売却）',
+    '　平均取得 ' + sym + Number(entry.cost).toLocaleString() + '（変わりません）',
+    '　投資額 ' + sym + Math.round(newQty * Number(entry.cost)).toLocaleString()
+  ].join('\n');
 }
 
 
