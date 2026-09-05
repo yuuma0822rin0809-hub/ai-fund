@@ -417,6 +417,26 @@ def render_admin():
             save_users(users, sha, f"sub_name {uid}")
             st.rerun()
 
+    def password_reset_editor(uid, rec):
+        """管理者がその人のパスワードを新しいものに置き換える。"""
+        c1, c2 = st.columns([4, 1])
+        new_pw = c1.text_input(
+            "新しいパスワード（6文字以上）",
+            key=f"pw_{uid}",
+            placeholder="新しいパスワード（6文字以上）を入れて「再設定」",
+            label_visibility="collapsed",
+        )
+        if c2.button("再設定", key=f"reset_pw_{uid}"):
+            if len(new_pw) < 6:
+                st.error("パスワードは6文字以上にしてください。")
+            else:
+                salt = pysecrets.token_hex(16)
+                users["users"][uid]["salt"] = salt
+                users["users"][uid]["hash"] = make_hash(new_pw, salt)
+                users["users"][uid]["pw_reset_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                save_users(users, sha, f"reset password {uid}")
+                st.success(f"{rec['name']}（{uid}）のパスワードを再設定しました。本人に新しいパスワードを伝えてください。")
+
     pending = {k: v for k, v in users["users"].items() if v["status"] == "pending"}
     others = {k: v for k, v in users["users"].items() if v["status"] != "pending"}
 
@@ -434,6 +454,7 @@ def render_admin():
                     save_users(users, sha, f"reject {uid}")
                     st.rerun()
                 sub_name_editor(uid, rec)
+                password_reset_editor(uid, rec)
         st.divider()
 
     st.markdown("#### 利用可否")
@@ -450,6 +471,7 @@ def render_admin():
             if c4.button("✔ 利用停止", key=f"off_{uid}", disabled=not active, type="primary" if active else "secondary"):
                 update(uid, "stopped", f"stop {uid}")
             sub_name_editor(uid, rec)
+            password_reset_editor(uid, rec)
 
 
 # ============================================================
