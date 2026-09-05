@@ -59,7 +59,11 @@
     },
     "SNDK": {
       "qty": 0.01756,
-      "cost": 4704
+      "cost": 4704,
+      "target": {
+        "type": "amount",
+        "value": 5200
+      }
     }
   }
 }
