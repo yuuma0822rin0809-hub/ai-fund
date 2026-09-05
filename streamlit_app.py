@@ -395,35 +395,61 @@ def render_admin():
         save_users(users, sha, msg)
         st.rerun()
 
+    def label(uid, rec):
+        sub = rec.get("sub_name", "")
+        text = f"**{rec['name']}**（{uid}）"
+        if sub:
+            text += f"　｜　サブ名：**{sub}**"
+        return text
+
+    def sub_name_editor(uid, rec):
+        """管理者だけが見られるサブ名（本人には表示されない）。"""
+        c1, c2 = st.columns([4, 1])
+        new_sub = c1.text_input(
+            "サブ名（管理用・本人には見えません）",
+            value=rec.get("sub_name", ""),
+            key=f"sub_{uid}",
+            placeholder="例：本名、店名、誰か分かるメモ",
+            label_visibility="collapsed",
+        )
+        if c2.button("保存", key=f"save_sub_{uid}"):
+            users["users"][uid]["sub_name"] = new_sub.strip()
+            save_users(users, sha, f"sub_name {uid}")
+            st.rerun()
+
     pending = {k: v for k, v in users["users"].items() if v["status"] == "pending"}
     others = {k: v for k, v in users["users"].items() if v["status"] != "pending"}
 
     if pending:
         st.markdown("#### 🆕 承認待ち")
         for uid, rec in pending.items():
-            c1, c2, c3, c4 = st.columns([3, 2, 1.2, 1.2])
-            c1.write(f"**{rec['name']}**（{uid}）")
-            c2.caption(f"申請 {rec.get('created', '')}")
-            if c3.button("✅ 承認", key=f"approve_{uid}", type="primary"):
-                update(uid, "active", f"approve {uid}")
-            if c4.button("🗑 却下", key=f"reject_{uid}"):
-                del users["users"][uid]
-                save_users(users, sha, f"reject {uid}")
-                st.rerun()
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns([3, 2, 1.2, 1.2])
+                c1.markdown(label(uid, rec))
+                c2.caption(f"申請 {rec.get('created', '')}")
+                if c3.button("✅ 承認", key=f"approve_{uid}", type="primary"):
+                    update(uid, "active", f"approve {uid}")
+                if c4.button("🗑 却下", key=f"reject_{uid}"):
+                    del users["users"][uid]
+                    save_users(users, sha, f"reject {uid}")
+                    st.rerun()
+                sub_name_editor(uid, rec)
         st.divider()
 
     st.markdown("#### 利用可否")
     if not others:
         st.caption("承認済みのユーザーはまだいません。")
     for uid, rec in others.items():
-        c1, c2, c3, c4 = st.columns([3, 2, 1.2, 1.2])
-        c1.write(f"**{rec['name']}**（{uid}）")
-        active = rec["status"] == "active"
-        c2.write("🟢 利用許可" if active else "⛔ 利用停止")
-        if c3.button("✔ 利用許可", key=f"on_{uid}", disabled=active, type="primary" if not active else "secondary"):
-            update(uid, "active", f"enable {uid}")
-        if c4.button("✔ 利用停止", key=f"off_{uid}", disabled=not active, type="primary" if active else "secondary"):
-            update(uid, "stopped", f"stop {uid}")
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns([3, 2, 1.2, 1.2])
+            c1.markdown(label(uid, rec))
+            active = rec["status"] == "active"
+            c2.write("🟢 利用許可" if active else "⛔ 利用停止")
+            if c3.button("✔ 利用許可", key=f"on_{uid}", disabled=active, type="primary" if not active else "secondary"):
+                update(uid, "active", f"enable {uid}")
+            if c4.button("✔ 利用停止", key=f"off_{uid}", disabled=not active, type="primary" if active else "secondary"):
+                update(uid, "stopped", f"stop {uid}")
+            sub_name_editor(uid, rec)
 
 
 # ============================================================
