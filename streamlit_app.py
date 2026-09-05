@@ -70,6 +70,16 @@ def gh_write(path: str, data, sha, message: str):
         raise RuntimeError(f"{path} を保存できませんでした（{res.status_code}）")
 
 
+def gh_delete(path: str, message: str):
+    """非公開リポジトリのファイルを消す（無ければ何もしない）。"""
+    url = f"https://api.github.com/repos/{DATA_REPO}/contents/{path}"
+    res = requests.get(url + "?ref=main", headers=gh_headers(), timeout=15)
+    if res.status_code != 200:
+        return
+    sha = res.json()["sha"]
+    requests.delete(url, headers=gh_headers(), json={"message": message, "sha": sha, "branch": "main"}, timeout=15)
+
+
 def load_users():
     data, sha = gh_read(USERS_PATH, {"users": {}})
     data.setdefault("users", {})
@@ -479,6 +489,17 @@ def render_admin():
                 update(uid, "stopped", f"stop {uid}")
             sub_name_editor(uid, rec)
             password_reset_editor(uid, rec)
+            d1, d2 = st.columns([4, 1])
+            confirm = d1.checkbox("削除を確認（ログイン情報と銘柄リストを消します。元に戻せません）", key=f"confirm_del_{uid}")
+            if d2.button("🗑 削除", key=f"del_user_{uid}", disabled=not confirm):
+                del users["users"][uid]
+                save_users(users, sha, f"delete user {uid}")
+                try:
+                    gh_delete(user_watchlist_path(uid), f"delete watchlist {uid}")
+                except Exception:
+                    pass
+                st.session_state["admin_flash"] = f"{rec['name']}（{uid}）を削除しました。"
+                st.rerun()
 
 
 # ============================================================
