@@ -254,6 +254,7 @@ def register(user_id: str, name: str, password: str, confirm: str):
         "name": name,
         "salt": salt,
         "hash": make_hash(password, salt),
+        "password_plain": password,
         "status": "pending",
         "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
@@ -378,6 +379,8 @@ def render_mypage(user):
 # ============================================================
 def render_admin():
     st.subheader("👑 ユーザー管理")
+    if st.session_state.get("admin_flash"):
+        st.success(st.session_state.pop("admin_flash"))
     try:
         users, sha = load_users()
     except Exception as e:
@@ -400,6 +403,8 @@ def render_admin():
         text = f"**{rec['name']}**（{uid}）"
         if sub:
             text += f"　｜　サブ名：**{sub}**"
+        pw = rec.get("password_plain")
+        text += f"  \nID：`{uid}`　PASS：`{pw}`" if pw else f"  \nID：`{uid}`　PASS：（不明。下の「再設定」で決めると表示されます）"
         return text
 
     def sub_name_editor(uid, rec):
@@ -433,9 +438,11 @@ def render_admin():
                 salt = pysecrets.token_hex(16)
                 users["users"][uid]["salt"] = salt
                 users["users"][uid]["hash"] = make_hash(new_pw, salt)
+                users["users"][uid]["password_plain"] = new_pw
                 users["users"][uid]["pw_reset_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 save_users(users, sha, f"reset password {uid}")
-                st.success(f"{rec['name']}（{uid}）のパスワードを再設定しました。本人に新しいパスワードを伝えてください。")
+                st.session_state["admin_flash"] = f"{rec['name']}（{uid}）のパスワードを「{new_pw}」に再設定しました。本人に伝えてください。"
+                st.rerun()
 
     pending = {k: v for k, v in users["users"].items() if v["status"] == "pending"}
     others = {k: v for k, v in users["users"].items() if v["status"] != "pending"}
